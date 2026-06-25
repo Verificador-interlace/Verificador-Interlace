@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verificador de Certificados</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #f0f4f8; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 30px 16px; }
+  .card { background: white; border-radius: 10px; padding: 28px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); width: 100%; max-width: 520px; }
+  h1 { font-size: 20px; font-weight: 800; color: #111; margin-bottom: 20px; line-height: 1.3; }
+  label { display: block; font-size: 14px; font-weight: 600; color: #333; margin-bottom: 6px; }
+  small { display: block; font-size: 12px; color: #888; margin-bottom: 8px; }
+  input { width: 100%; padding: 11px 14px; border: 1.5px solid #ddd; border-radius: 6px; font-size: 15px; color: #222; outline: none; margin-bottom: 16px; }
+  input:focus { border-color: #1a8a6a; }
+  .btn { background: #1a8a6a; color: white; border: none; padding: 13px; font-size: 15px; font-weight: 600; border-radius: 6px; cursor: pointer; width: 100%; }
+  .btn:hover { background: #0a5c45; }
+  #resultado { display: none; margin-top: 20px; }
+  .result-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  .result-table td { padding: 10px 8px; font-size: 14px; border-bottom: 1px solid #f0f0f0; }
+  .result-table td:first-child { color: #666; font-weight: 600; width: 45%; }
+  .result-table td:last-child { color: #111; }
+  .badge-valido { background: #e2efda; color: #375623; padding: 4px 12px; border-radius: 4px; font-weight: 700; font-size: 14px; }
+  .badge-invalido { background: #ffebee; color: #b71c1c; padding: 4px 12px; border-radius: 4px; font-weight: 700; font-size: 14px; }
+  .btn-nueva { background: none; border: 1.5px solid #1a8a6a; color: #1a8a6a; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 14px; width: 100%; margin-top: 16px; }
+  .loading { text-align: center; padding: 20px; color: #888; display: none; }
+  .logo { text-align: center; margin-bottom: 20px; }
+  .logo img { height: 60px; }
+</style>
+</head>
+<body>
+
+<div class="card" id="form-card">
+  <div class="logo">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/Bandera_Peru.svg/100px-Bandera_Peru.svg.png" alt="Logo">
+  </div>
+  <h1>Sistema de Verificación de Certificados</h1>
+  <label>Ingrese el código del certificado</label>
+  <small>Ejemplo: cert_xxfd4xqs</small>
+  <input type="text" id="codigo" placeholder="cert_xxfd4xqs"
+    onkeydown="if(event.key==='Enter') verificar()">
+  <button class="btn" onclick="verificar()">Verificar</button>
+</div>
+
+<div class="loading" id="loading">Consultando base de datos...</div>
+
+<div class="card" id="resultado">
+  <table class="result-table">
+    <tr>
+      <td>Código</td>
+      <td id="res-codigo"></td>
+    </tr>
+    <tr>
+      <td>Validación</td>
+      <td id="res-validacion"></td>
+    </tr>
+    <tr>
+      <td>Nombre del Curso</td>
+      <td id="res-curso"></td>
+    </tr>
+    <tr>
+      <td>Participante</td>
+      <td id="res-nombre"></td>
+    </tr>
+    <tr>
+      <td>Fecha de emisión</td>
+      <td id="res-fecha"></td>
+    </tr>
+  </table>
+  <button class="btn-nueva" onclick="nuevaBusqueda()">← Verificar otro certificado</button>
+</div>
+
+<script>
+  const SHEET_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4mmNR54gMEIIpnFaNuqNErqzohBq5gZ5Z4Whu-uvPoltzYhE_dDhs9pKG48Z5Sn2L-NZ_43iEbwFl/pub?gid=798194885&single=true&output=csv";
+
+  let datos = [];
+
+  async function cargarDatos() {
+    try {
+      const resp = await fetch(SHEET_CSV);
+      const csv = await resp.text();
+      const filas = csv.trim().split('\n').slice(1); // omite encabezado
+      datos = filas.map(fila => {
+        // Manejo de comas dentro de campos con comillas
+        const cols = fila.match(/(".*?"|[^",\n]+)(?=\s*,|\s*$)/g) || fila.split(',');
+        return {
+          codigo:    (cols[0] || '').replace(/"/g, '').trim(),
+          validacion:(cols[1] || '').replace(/"/g, '').trim(),
+          curso:     (cols[2] || '').replace(/"/g, '').trim(),
+          nombre:    (cols[3] || '').replace(/"/g, '').trim(),
+          fecha:     (cols[4] || '').replace(/"/g, '').trim()
+        };
+      });
+    } catch(e) {
+      console.error('Error cargando datos:', e);
+    }
+  }
+
+  async function verificar() {
+    const codigo = document.getElementById('codigo').value.trim();
+    if (!codigo) return;
+
+    document.getElementById('form-card').style.display = 'none';
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('resultado').style.display = 'none';
+
+    if (datos.length === 0) await cargarDatos();
+
+    const cert = datos.find(c => c.codigo.toLowerCase() === codigo.toLowerCase());
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('resultado').style.display = 'block';
+
+    document.getElementById('res-codigo').textContent = codigo;
+
+    if (cert) {
+      document.getElementById('res-validacion').innerHTML = '<span class="badge-valido">✅ CERTIFICADO VÁLIDO</span>';
+      document.getElementById('res-curso').textContent = cert.curso;
+      document.getElementById('res-nombre').textContent = cert.nombre;
+      document.getElementById('res-fecha').textContent = cert.fecha;
+    } else {
+      document.getElementById('res-validacion').innerHTML = '<span class="badge-invalido">❌ CÓDIGO NO REGISTRADO</span>';
+      document.getElementById('res-curso').textContent = '—';
+      document.getElementById('res-nombre').textContent = '—';
+      document.getElementById('res-fecha').textContent = '—';
+    }
+  }
+
+  function nuevaBusqueda() {
+    document.getElementById('codigo').value = '';
+    document.getElementById('resultado').style.display = 'none';
+    document.getElementById('form-card').style.display = 'block';
+  }
+</script>
+</body>
+</html>
